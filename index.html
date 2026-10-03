@@ -1,0 +1,1416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>20. The Curse Of Madress - 3D RPG</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900&family=Inter:wght@300;400;600;700&display=swap');
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: #050508;
+            user-select: none;
+            color: #e2e8f0;
+        }
+
+        .font-cinzel {
+            font-family: 'Cinzel', serif;
+        }
+
+        /* Gothic Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 12, 25, 0.8);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #a855f7;
+            border-radius: 3px;
+        }
+
+        /* Glassmorphism Panels */
+        .gothic-panel {
+            background: rgba(13, 10, 24, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(168, 85, 247, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8), inset 0 0 15px rgba(168, 85, 247, 0.15);
+        }
+
+        .gothic-btn {
+            background: linear-gradient(135deg, #4c1d95 0%, #2e1065 100%);
+            border: 1px solid #c084fc;
+            box-shadow: 0 4px 12px rgba(168, 85, 247, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .gothic-btn:hover {
+            background: linear-gradient(135deg, #6d28d9 0%, #4c1d95 100%);
+            box-shadow: 0 0 20px rgba(192, 132, 252, 0.6);
+            transform: translateY(-1px);
+        }
+
+        .gothic-btn:active {
+            transform: translateY(1px);
+        }
+
+        /* Damage Numbers Overlay */
+        .dmg-text {
+            position: absolute;
+            font-family: 'Cinzel', serif;
+            font-weight: 900;
+            pointer-events: none;
+            animation: floatUpAndFade 1.2s forwards cubic-bezier(0.1, 0.8, 0.3, 1);
+            text-shadow: 0 0 8px rgba(0,0,0,0.9), 0 0 12px rgba(0,0,0,0.9);
+        }
+
+        @keyframes floatUpAndFade {
+            0% { opacity: 1; transform: translateY(0) scale(1); }
+            50% { transform: translateY(-30px) scale(1.3); }
+            100% { opacity: 0; transform: translateY(-60px) scale(0.8); }
+        }
+
+        /* HUD Bar Gradients */
+        .hp-bar { background: linear-gradient(90deg, #dc2626 0%, #ef4444 100%); }
+        .mp-bar { background: linear-gradient(90deg, #2563eb 0%, #3b82f6 100%); }
+        .exp-bar { background: linear-gradient(90deg, #eab308 0%, #fde047 100%); }
+
+        /* Minimap pulse */
+        @keyframes radarPulse {
+            0% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(168, 85, 247, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(168, 85, 247, 0); }
+        }
+        .minimap-container {
+            animation: radarPulse 3s infinite;
+        }
+    </style>
+</head>
+<body class="relative w-full h-full bg-black select-none overflow-hidden">
+
+    <!-- 3D WebGL Canvas Container -->
+    <div id="canvas-container" class="absolute inset-0 w-full h-full z-0 cursor-crosshair"></div>
+
+    <!-- 3D Floating World Labels (Damage & Target HP) -->
+    <div id="ui-world-layer" class="absolute inset-0 pointer-events-none z-10 overflow-hidden"></div>
+
+    <!-- HUD OVERLAY -->
+    <div id="hud-layer" class="absolute inset-0 pointer-events-none z-20 flex flex-col justify-between p-4 sm:p-6">
+        
+        <!-- Top HUD Header -->
+        <div class="flex justify-between items-start w-full">
+            <!-- Player Stats & Profile -->
+            <div class="gothic-panel p-3 sm:p-4 rounded-xl pointer-events-auto flex items-center gap-4 w-72 sm:w-96">
+                <div class="relative flex-shrink-0">
+                    <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 border-amber-400 bg-purple-950/80 flex items-center justify-center text-amber-300 font-cinzel text-xl sm:text-2xl font-bold shadow-lg shadow-purple-950/50" id="player-avatar">
+                        <i class="fa-solid fa-cross"></i>
+                    </div>
+                    <span id="player-level" class="absolute -bottom-1 -right-1 bg-amber-500 text-black text-xs font-bold px-2 py-0.5 rounded-full border border-amber-200">Lv.1</span>
+                </div>
+
+                <div class="flex-1 min-w-0">
+                    <div class="flex justify-between items-center mb-1">
+                        <h2 id="player-name" class="font-cinzel font-bold text-amber-200 text-sm sm:text-base truncate">Exorcist Hero</h2>
+                        <span id="player-class-badge" class="text-xs px-2 py-0.5 rounded bg-purple-900/60 text-purple-300 border border-purple-500/30">Exorcist</span>
+                    </div>
+
+                    <!-- HP Bar -->
+                    <div class="w-full h-3 bg-gray-950 rounded-full overflow-hidden border border-red-900/50 mb-1 relative">
+                        <div id="hp-bar-fill" class="hp-bar h-full w-full transition-all duration-300"></div>
+                        <span id="hp-text" class="absolute inset-0 text-[9px] font-bold text-white text-center leading-3 drop-shadow">100 / 100</span>
+                    </div>
+
+                    <!-- MP Bar -->
+                    <div class="w-full h-2.5 bg-gray-950 rounded-full overflow-hidden border border-blue-900/50 mb-1 relative">
+                        <div id="mp-bar-fill" class="mp-bar h-full w-full transition-all duration-300"></div>
+                        <span id="mp-text" class="absolute inset-0 text-[8px] font-bold text-white text-center leading-2.5 drop-shadow">50 / 50</span>
+                    </div>
+
+                    <!-- EXP Bar -->
+                    <div class="w-full h-1.5 bg-gray-950 rounded-full overflow-hidden border border-amber-900/50 relative">
+                        <div id="exp-bar-fill" class="exp-bar h-full w-0 transition-all duration-300"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mini Map & System Controls -->
+            <div class="flex flex-col items-end gap-3 pointer-events-auto">
+                <!-- Minimap -->
+                <div class="minimap-container gothic-panel p-1.5 rounded-xl border border-purple-500/40 relative">
+                    <canvas id="minimap-canvas" width="130" height="130" class="rounded-lg bg-slate-950"></canvas>
+                    <span class="absolute top-2 left-3 text-[10px] font-cinzel text-purple-300 bg-black/60 px-1.5 py-0.5 rounded">MADRESS TOWN</span>
+                </div>
+
+                <!-- Action Menu Buttons -->
+                <div class="flex gap-2">
+                    <button onclick="toggleWindow('story-modal')" title="Story & Moral" class="gothic-btn p-2.5 rounded-lg text-amber-300 hover:text-white">
+                        <i class="fa-solid fa-scroll text-lg"></i>
+                    </button>
+                    <button onclick="toggleWindow('quest-modal')" title="Quests" class="gothic-btn p-2.5 rounded-lg text-amber-300 hover:text-white relative">
+                        <i class="fa-solid fa-book-bookmark text-lg"></i>
+                        <span id="quest-indicator" class="hidden absolute -top-1 -right-1 w-3 h-3 bg-amber-400 rounded-full animate-ping"></span>
+                    </button>
+                    <button onclick="toggleWindow('inventory-modal')" title="Inventory" class="gothic-btn p-2.5 rounded-lg text-amber-300 hover:text-white">
+                        <i class="fa-solid fa-briefcase text-lg"></i>
+                    </button>
+                    <button onclick="toggleWindow('skill-modal')" title="Skill Tree" class="gothic-btn p-2.5 rounded-lg text-amber-300 hover:text-white">
+                        <i class="fa-solid fa-sitemap text-lg"></i>
+                    </button>
+                    <button id="audio-toggle-btn" onclick="toggleAudio()" title="Sound FX" class="gothic-btn p-2.5 rounded-lg text-amber-300 hover:text-white">
+                        <i class="fa-solid fa-volume-high text-lg" id="audio-icon"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Center Target Boss / NPC HP Bar -->
+        <div id="target-hud" class="self-center hidden transition-all duration-300 pointer-events-auto w-80 sm:w-96 gothic-panel p-3 rounded-xl border border-red-500/40 -mt-12">
+            <div class="flex justify-between items-center mb-1">
+                <span id="target-name" class="font-cinzel text-xs font-bold text-red-300">Chesar - Cursed Madress</span>
+                <span id="target-lvl" class="text-[10px] text-amber-400 font-bold">BOSS</span>
+            </div>
+            <div class="w-full h-3 bg-gray-950 rounded-full overflow-hidden border border-red-900/80">
+                <div id="target-hp-fill" class="hp-bar h-full w-full transition-all duration-200"></div>
+            </div>
+        </div>
+
+        <!-- Bottom Action Bar & Quest Tracker -->
+        <div class="flex justify-between items-end w-full">
+            <!-- Active Quest Tracker Widget -->
+            <div class="gothic-panel p-3 rounded-xl pointer-events-auto max-w-xs border border-purple-500/30 text-xs hidden sm:block">
+                <div class="text-amber-400 font-cinzel font-bold mb-1 border-b border-purple-500/30 pb-1 flex items-center justify-between">
+                    <span><i class="fa-solid fa-compass mr-1"></i> Active Quest</span>
+                    <span id="quest-tracker-title" class="text-purple-300">Chapter 12</span>
+                </div>
+                <p id="quest-tracker-desc" class="text-gray-300 leading-tight">Find Village Priest Father Machete in Madress Church.</p>
+            </div>
+
+            <!-- Skill Action Hotbar -->
+            <div class="flex items-center gap-2 sm:gap-3 pointer-events-auto gothic-panel p-2.5 rounded-2xl border border-purple-500/40">
+                <!-- Skill 1 -->
+                <button onclick="triggerSkill(1)" class="relative group w-12 h-12 sm:w-14 sm:h-14 bg-purple-950/80 border border-purple-400/50 rounded-xl flex flex-col items-center justify-center hover:border-amber-400 transition-all active:scale-95">
+                    <i class="fa-solid fa-wand-magic-sparkles text-amber-300 text-lg sm:text-xl"></i>
+                    <span class="text-[9px] font-bold text-gray-300 mt-0.5">Holy Slash</span>
+                    <span class="absolute top-1 left-1 bg-black/70 text-amber-400 text-[10px] px-1 rounded font-mono">1</span>
+                    <div id="cd-1" class="absolute inset-0 bg-black/80 rounded-xl hidden flex items-center justify-center text-xs font-bold text-white">0s</div>
+                </button>
+
+                <!-- Skill 2 -->
+                <button onclick="triggerSkill(2)" class="relative group w-12 h-12 sm:w-14 sm:h-14 bg-purple-950/80 border border-purple-400/50 rounded-xl flex flex-col items-center justify-center hover:border-amber-400 transition-all active:scale-95">
+                    <i class="fa-solid fa-sun text-yellow-300 text-lg sm:text-xl"></i>
+                    <span class="text-[9px] font-bold text-gray-300 mt-0.5">Purify AOE</span>
+                    <span class="absolute top-1 left-1 bg-black/70 text-amber-400 text-[10px] px-1 rounded font-mono">2</span>
+                    <div id="cd-2" class="absolute inset-0 bg-black/80 rounded-xl hidden flex items-center justify-center text-xs font-bold text-white">0s</div>
+                </button>
+
+                <!-- Skill 3 -->
+                <button onclick="triggerSkill(3)" class="relative group w-12 h-12 sm:w-14 sm:h-14 bg-purple-950/80 border border-purple-400/50 rounded-xl flex flex-col items-center justify-center hover:border-amber-400 transition-all active:scale-95">
+                    <i class="fa-solid fa-shield-halved text-cyan-300 text-lg sm:text-xl"></i>
+                    <span class="text-[9px] font-bold text-gray-300 mt-0.5">Holy Shield</span>
+                    <span class="absolute top-1 left-1 bg-black/70 text-amber-400 text-[10px] px-1 rounded font-mono">3</span>
+                    <div id="cd-3" class="absolute inset-0 bg-black/80 rounded-xl hidden flex items-center justify-center text-xs font-bold text-white">0s</div>
+                </button>
+
+                <!-- Potion Button -->
+                <button onclick="usePotion()" class="relative group w-12 h-12 sm:w-14 sm:h-14 bg-purple-950/80 border border-purple-400/50 rounded-xl flex flex-col items-center justify-center hover:border-amber-400 transition-all active:scale-95">
+                    <i class="fa-solid fa-flask text-red-400 text-lg sm:text-xl"></i>
+                    <span class="text-[9px] font-bold text-gray-300 mt-0.5">Potion</span>
+                    <span id="potion-count" class="absolute top-0.5 right-1 bg-red-600 text-white text-[10px] font-bold px-1 rounded-full">3</span>
+                    <span class="absolute top-1 left-1 bg-black/70 text-amber-400 text-[10px] px-1 rounded font-mono">4</span>
+                </button>
+            </div>
+
+            <!-- Controls Prompt -->
+            <div class="hidden md:block gothic-panel p-2.5 rounded-xl pointer-events-auto text-[10px] text-gray-400">
+                <div><span class="text-amber-300 font-bold">WASD / Arrows</span> : Move</div>
+                <div><span class="text-amber-300 font-bold">Mouse Drag</span> : Orbit Camera</div>
+                <div><span class="text-amber-300 font-bold">Left Click</span> : Attack Target</div>
+                <div><span class="text-amber-300 font-bold">E Key</span> : Interact NPC / Fountain</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- STORY & MORAL LESSON MODAL -->
+    <div id="story-modal" class="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4 backdrop-blur-md">
+        <div class="gothic-panel w-full max-w-2xl rounded-2xl border-2 border-amber-500/50 p-6 sm:p-8 flex flex-col max-h-[90vh] shadow-2xl relative">
+            <button onclick="toggleWindow('story-modal')" class="absolute top-4 right-4 text-gray-400 hover:text-white text-xl">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            
+            <div class="text-center mb-4">
+                <span class="text-xs uppercase tracking-widest text-amber-400 font-bold">March 8, 2017 - Chapter 12</span>
+                <h1 class="font-cinzel text-2xl sm:text-3xl font-extrabold text-purple-300 mt-1">20. The Curse Of Madress</h1>
+                <p class="text-xs text-amber-200/80 italic mt-1">By Machete Medrango</p>
+            </div>
+
+            <div class="overflow-y-auto pr-2 my-4 space-y-4 text-sm text-gray-200 leading-relaxed font-serif bg-black/40 p-4 rounded-xl border border-purple-900/40">
+                <p class="first-letter:text-3xl first-letter:font-cinzel first-letter:text-amber-400">
+                    "Once upon a time the Madre is on the church she is the assistance in catching coins in the end of the mass suddenly Madre has a fond of wearing dresses always so she was cursed by spell to change Madre into dress named Chesar is a female lady. With affordable gown when she notice every Madre worn for it turns to dress while Madre do dressing without limits Chesar broke her spells to become Madre then turn to dress she changed person to a cloth."
+                </p>
+
+                <div class="p-3 bg-amber-950/40 border-l-4 border-amber-500 rounded-r-lg mt-4">
+                    <span class="block font-cinzel font-bold text-amber-400 text-xs uppercase tracking-wider mb-1">Moral Lesson:</span>
+                    <p class="italic text-amber-200 font-sans font-semibold">
+                        "Don’t wear dress always because it’s too bad without limit and if you don’t change always the dress."
+                    </p>
+                </div>
+            </div>
+
+            <button onclick="toggleWindow('story-modal')" class="gothic-btn w-full py-3 rounded-xl font-cinzel font-bold text-amber-200 text-sm tracking-wider uppercase mt-2">
+                Enter Cursed Realm
+            </button>
+        </div>
+    </div>
+
+    <!-- NPC DIALOG SYSTEM POPUP -->
+    <div id="dialog-modal" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-40 w-11/12 max-w-xl hidden">
+        <div class="gothic-panel p-5 rounded-2xl border-2 border-amber-400/60 shadow-2xl relative">
+            <div class="flex items-start gap-4">
+                <div class="w-16 h-16 rounded-xl border border-amber-400 bg-purple-900/60 flex items-center justify-center text-3xl text-amber-300 flex-shrink-0" id="dialog-avatar">
+                    <i class="fa-solid fa-user-ninja"></i>
+                </div>
+                <div class="flex-1">
+                    <h3 id="dialog-speaker" class="font-cinzel font-bold text-amber-300 text-base">Father Machete</h3>
+                    <p id="dialog-text" class="text-sm text-gray-200 mt-1 leading-relaxed">Blessings, Exorcist! Madre Chesar's vanity has cursed our village. Protect us from the floating dresses!</p>
+                    
+                    <div id="dialog-actions" class="flex flex-wrap gap-2 mt-4">
+                        <button id="dialog-btn-primary" onclick="handleDialogAction()" class="gothic-btn px-4 py-1.5 rounded-lg text-xs font-bold text-amber-200">
+                            Accept Quest
+                        </button>
+                        <button onclick="closeDialog()" class="px-4 py-1.5 rounded-lg text-xs font-bold bg-gray-800 text-gray-300 hover:bg-gray-700">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- QUEST LOG MODAL -->
+    <div id="quest-modal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="gothic-panel w-full max-w-xl rounded-2xl border border-purple-500/40 p-6 flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center border-b border-purple-500/30 pb-3">
+                <h2 class="font-cinzel font-bold text-xl text-amber-300"><i class="fa-solid fa-scroll mr-2"></i> Quest Chronicles</h2>
+                <button onclick="toggleWindow('quest-modal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <div class="overflow-y-auto my-4 space-y-3 pr-2 flex-1" id="quest-list-container">
+                <!-- Quests populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- INVENTORY & EQUIPMENT MODAL -->
+    <div id="inventory-modal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="gothic-panel w-full max-w-2xl rounded-2xl border border-purple-500/40 p-6 flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center border-b border-purple-500/30 pb-3">
+                <h2 class="font-cinzel font-bold text-xl text-amber-300"><i class="fa-solid fa-shield-cat mr-2"></i> Inventory & Gear</h2>
+                <button onclick="toggleWindow('inventory-modal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 my-4 flex-1 overflow-y-auto">
+                <!-- Character Equipment Slots -->
+                <div class="bg-black/40 p-3 rounded-xl border border-purple-900/50 flex flex-col gap-3">
+                    <h3 class="font-cinzel text-xs font-bold text-amber-400 border-b border-purple-800 pb-1">Equipment</h3>
+                    
+                    <div class="flex items-center gap-3 p-2 bg-purple-950/40 rounded-lg border border-purple-700/30">
+                        <div class="w-10 h-10 rounded border border-amber-500/50 bg-black/60 flex items-center justify-center text-amber-300"><i class="fa-solid fa-sword"></i></div>
+                        <div>
+                            <span class="text-[10px] text-gray-400 block">Weapon</span>
+                            <span id="eq-weapon" class="text-xs font-bold text-amber-200">Holy Exorcist Sword</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-3 p-2 bg-purple-950/40 rounded-lg border border-purple-700/30">
+                        <div class="w-10 h-10 rounded border border-amber-500/50 bg-black/60 flex items-center justify-center text-amber-300"><i class="fa-solid fa-user-shield"></i></div>
+                        <div>
+                            <span class="text-[10px] text-gray-400 block">Armor</span>
+                            <span id="eq-armor" class="text-xs font-bold text-amber-200">Blessed Robe</span>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-3 p-2 bg-purple-950/40 rounded-lg border border-purple-700/30">
+                        <div class="w-10 h-10 rounded border border-amber-500/50 bg-black/60 flex items-center justify-center text-amber-300"><i class="fa-solid fa-gem"></i></div>
+                        <div>
+                            <span class="text-[10px] text-gray-400 block">Accessory</span>
+                            <span id="eq-acc" class="text-xs font-bold text-amber-200">Rosary of Sobriety</span>
+                        </div>
+                    </div>
+
+                    <!-- Stats Overview -->
+                    <div class="mt-auto pt-2 border-t border-purple-900/50 text-xs space-y-1 text-gray-300">
+                        <div class="flex justify-between"><span>Attack:</span><span id="stat-atk" class="text-amber-300 font-bold">25</span></div>
+                        <div class="flex justify-between"><span>Defense:</span><span id="stat-def" class="text-blue-300 font-bold">10</span></div>
+                        <div class="flex justify-between"><span>Dress Resist:</span><span id="stat-res" class="text-purple-300 font-bold">15%</span></div>
+                    </div>
+                </div>
+
+                <!-- Item Bag -->
+                <div class="md:col-span-2 bg-black/40 p-3 rounded-xl border border-purple-900/50">
+                    <h3 class="font-cinzel text-xs font-bold text-amber-400 border-b border-purple-800 pb-1 mb-3">Item Storage</h3>
+                    <div id="inventory-grid" class="grid grid-cols-4 gap-2">
+                        <!-- Items rendered dynamically -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SKILL TREE MODAL -->
+    <div id="skill-modal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4 backdrop-blur-sm">
+        <div class="gothic-panel w-full max-w-xl rounded-2xl border border-purple-500/40 p-6 flex flex-col">
+            <div class="flex justify-between items-center border-b border-purple-500/30 pb-3">
+                <div>
+                    <h2 class="font-cinzel font-bold text-xl text-amber-300"><i class="fa-solid fa-sitemap mr-2"></i> Skill Tree & Class</h2>
+                    <p class="text-xs text-purple-300">Available Skill Points: <span id="skill-points-display" class="font-bold text-amber-400">0</span></p>
+                </div>
+                <button onclick="toggleWindow('skill-modal')" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <!-- Class Selection -->
+            <div class="my-4">
+                <span class="text-xs font-cinzel text-amber-400 font-bold block mb-2">Switch Player Class:</span>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="selectClass('Exorcist')" class="p-2 rounded-lg bg-purple-950 border border-purple-500 text-xs font-bold text-purple-200 hover:bg-purple-800">Exorcist</button>
+                    <button onclick="selectClass('Holy Knight')" class="p-2 rounded-lg bg-purple-950 border border-purple-500 text-xs font-bold text-purple-200 hover:bg-purple-800">Holy Knight</button>
+                    <button onclick="selectClass('Arcane Dressmaker')" class="p-2 rounded-lg bg-purple-950 border border-purple-500 text-xs font-bold text-purple-200 hover:bg-purple-800">Dressmaker</button>
+                </div>
+            </div>
+
+            <!-- Skill Nodes -->
+            <div class="space-y-3 my-2" id="skill-tree-list">
+                <!-- Skills rendered dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME OVER / VICTORY OVERLAY -->
+    <div id="endgame-modal" class="fixed inset-0 bg-black/90 z-50 hidden flex items-center justify-center p-4">
+        <div class="gothic-panel w-full max-w-md rounded-2xl border-2 border-amber-500 text-center p-8">
+            <h1 id="endgame-title" class="font-cinzel text-3xl font-extrabold text-amber-400 mb-2">VICTORY!</h1>
+            <p id="endgame-sub" class="text-sm text-gray-300 mb-6">You have purified Chesar and broken the Dress Curse!</p>
+            <button onclick="resetGame()" class="gothic-btn px-6 py-3 rounded-xl font-cinzel font-bold text-amber-200 text-sm">
+                Play Again
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /* SOUND FX GENERATOR (Web Audio API) */
+        let audioCtx = null;
+        let audioEnabled = true;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function toggleAudio() {
+            audioEnabled = !audioEnabled;
+            const icon = document.getElementById('audio-icon');
+            icon.className = audioEnabled ? 'fa-solid fa-volume-high text-lg' : 'fa-solid fa-volume-xmark text-lg text-red-400';
+        }
+
+        function playSound(type) {
+            if (!audioEnabled) return;
+            initAudio();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'slash') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.15);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(now + 0.15);
+            } else if (type === 'magic') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.exponentialRampToValueAtTime(800, now + 0.3);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(now + 0.3);
+            } else if (type === 'hit') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(120, now);
+                osc.frequency.exponentialRampToValueAtTime(40, now + 0.2);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(now + 0.2);
+            } else if (type === 'levelup') {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(261.63, now);
+                osc.frequency.setValueAtTime(329.63, now + 0.1);
+                osc.frequency.setValueAtTime(392.00, now + 0.2);
+                osc.frequency.setValueAtTime(523.25, now + 0.3);
+                gain.gain.setValueAtTime(0.4, now);
+                gain.gain.linearRampToValueAtTime(0.01, now + 0.5);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(now + 0.5);
+            }
+        }
+    </script>
+
+    <script>
+        /* GAME STATE VARIABLES */
+        const gameState = {
+            player: {
+                level: 1,
+                exp: 0,
+                nextExp: 100,
+                hp: 120,
+                maxHp: 120,
+                mp: 60,
+                maxMp: 60,
+                atk: 22,
+                def: 8,
+                dressResist: 10,
+                class: 'Exorcist',
+                potions: 3,
+                skillPoints: 0,
+                skills: {
+                    holySlashLvl: 1,
+                    purifyLvl: 1,
+                    shieldLvl: 1
+                },
+                x: 0,
+                z: 15,
+                rotY: 0,
+                mesh: null,
+                shieldActive: false
+            },
+            cooldowns: { 1: 0, 2: 0, 3: 0 },
+            inventory: [
+                { id: 'pot', name: 'Potion of Sobriety', type: 'consumable', icon: 'fa-flask', count: 3, desc: 'Restores 50 HP.' },
+                { id: 'fabric', name: 'Cursed Fabric', type: 'material', icon: 'fa-scroll', count: 0, desc: 'Torn pieces of cursed gowns.' }
+            ],
+            quests: [
+                { id: 'q1', title: 'Curse Prelude', desc: 'Talk to Priest Father Machete near the Church.', status: 'active', goal: 1, current: 0 },
+                { id: 'q2', title: 'Collect Cursed Fabric', desc: 'Defeat 5 Cursed Silk Gowns in the Haunted Village.', status: 'locked', goal: 5, current: 0 },
+                { id: 'q3', title: 'Purify Holy Water', desc: 'Interact with 3 Cursed Fountains around the altar.', status: 'locked', goal: 3, current: 0 },
+                { id: 'q4', title: 'Break Curse of Madress', desc: 'Defeat Chesar the Cursed Boss at the Grand Church Altar.', status: 'locked', goal: 1, current: 0 }
+            ],
+            currentQuestIndex: 0,
+            activeNPC: null,
+            fountains: [],
+            enemies: [],
+            boss: null
+        };
+
+        /* THREE.JS GLOBAL SETUP */
+        let scene, camera, renderer;
+        let keys = {};
+        let cameraOffset = new THREE.Vector3(0, 10, 15);
+        let isMouseDown = false;
+        let mouseX = 0, mouseY = 0;
+
+        /* INITIALIZATION */
+        window.onload = function() {
+            init3DScene();
+            initGameDataUI();
+            animate();
+            window.addEventListener('resize', onWindowResize);
+        };
+
+        function init3DScene() {
+            const container = document.getElementById('canvas-container');
+            
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x06040a);
+            scene.fog = new THREE.FogExp2(0x0a0518, 0.025);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            container.appendChild(renderer.domElement);
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0x4c3366, 0.8);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffd59e, 1.2);
+            dirLight.position.set(30, 50, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 2048;
+            dirLight.shadow.mapSize.height = 2048;
+            scene.add(dirLight);
+
+            // Ground & Terrain
+            const floorGeo = new THREE.PlaneGeometry(160, 160);
+            const floorMat = new THREE.MeshStandardMaterial({ color: 0x1a1528, roughness: 0.9 });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Grid helper for gothic floor tiles
+            const grid = new THREE.GridHelper(160, 40, 0xa855f7, 0x2e1065);
+            grid.position.y = 0.01;
+            scene.add(grid);
+
+            // Build Village Architecture & Church
+            createChurchBuilding();
+            createVillageEnvironment();
+            createFountains();
+
+            // Create Player Mesh
+            createPlayerMesh();
+
+            // Create NPCs
+            createNPCs();
+
+            // Spawn Enemies
+            spawnInitialEnemies();
+
+            // Input Event Listeners
+            setupInputListeners();
+        }
+
+        function createChurchBuilding() {
+            const churchGroup = new THREE.Group();
+            churchGroup.position.set(0, 0, -35);
+
+            // Main Hall
+            const hallGeo = new THREE.BoxGeometry(24, 18, 40);
+            const hallMat = new THREE.MeshStandardMaterial({ color: 0x2a2238, roughness: 0.7 });
+            const hall = new THREE.Mesh(hallGeo, hallMat);
+            hall.position.y = 9;
+            hall.castShadow = true;
+            hall.receiveShadow = true;
+            churchGroup.add(hall);
+
+            // Church Roof
+            const roofGeo = new THREE.ConeGeometry(20, 10, 4);
+            const roofMat = new THREE.MeshStandardMaterial({ color: 0x4c1d95 });
+            const roof = new THREE.Mesh(roofGeo, roofMat);
+            roof.position.y = 23;
+            roof.rotation.y = Math.PI / 4;
+            churchGroup.add(roof);
+
+            // Pillars
+            for (let i = -10; i <= 10; i += 10) {
+                const pillarGeo = new THREE.CylinderGeometry(1, 1, 16, 8);
+                const pillarMat = new THREE.MeshStandardMaterial({ color: 0x4a3b5c });
+                
+                const p1 = new THREE.Mesh(pillarGeo, pillarMat);
+                p1.position.set(13, 8, i);
+                churchGroup.add(p1);
+
+                const p2 = new THREE.Mesh(pillarGeo, pillarMat);
+                p2.position.set(-13, 8, i);
+                churchGroup.add(p2);
+            }
+
+            // Altar Light / Glow
+            const altarGlow = new THREE.PointLight(0xa855f7, 3, 25);
+            altarGlow.position.set(0, 4, -10);
+            churchGroup.add(altarGlow);
+
+            scene.add(churchGroup);
+        }
+
+        function createVillageEnvironment() {
+            // Dead Trees
+            for (let i = 0; i < 20; i++) {
+                const treeGroup = new THREE.Group();
+                const trunkGeo = new THREE.CylinderGeometry(0.5, 0.8, 6, 6);
+                const trunkMat = new THREE.MeshStandardMaterial({ color: 0x1f1924 });
+                const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+                trunk.position.y = 3;
+                treeGroup.add(trunk);
+
+                const folGeo = new THREE.DodecahedronGeometry(2.5, 0);
+                const folMat = new THREE.MeshStandardMaterial({ color: 0x3b0764, flatShading: true });
+                const fol = new THREE.Mesh(folGeo, folMat);
+                fol.position.y = 6.5;
+                treeGroup.add(fol);
+
+                const rx = (Math.random() - 0.5) * 130;
+                const rz = (Math.random() - 0.5) * 130;
+                if (Math.abs(rx) > 15 || Math.abs(rz) > 15) {
+                    treeGroup.position.set(rx, 0, rz);
+                    scene.add(treeGroup);
+                }
+            }
+        }
+
+        function createFountains() {
+            const positions = [
+                { x: -25, z: -10 },
+                { x: 25, z: -10 },
+                { x: 0, z: -60 }
+            ];
+
+            positions.forEach((pos, idx) => {
+                const fGroup = new THREE.Group();
+                fGroup.position.set(pos.x, 0, pos.z);
+
+                const baseGeo = new THREE.CylinderGeometry(3, 3.5, 1.5, 8);
+                const baseMat = new THREE.MeshStandardMaterial({ color: 0x332940 });
+                const base = new THREE.Mesh(baseGeo, baseMat);
+                base.position.y = 0.75;
+                fGroup.add(base);
+
+                // Water mesh
+                const waterGeo = new THREE.CylinderGeometry(2.6, 2.6, 0.2, 8);
+                const waterMat = new THREE.MeshStandardMaterial({ color: 0x06b6d4, emissive: 0x0891b2, emissiveIntensity: 0.5 });
+                const water = new THREE.Mesh(waterGeo, waterMat);
+                water.position.y = 1.5;
+                fGroup.add(water);
+
+                fGroup.userData = { id: idx, purified: false };
+                scene.add(fGroup);
+                gameState.fountains.push(fGroup);
+            });
+        }
+
+        function createPlayerMesh() {
+            const playerGroup = new THREE.Group();
+
+            // Body / Cloak
+            const bodyGeo = new THREE.ConeGeometry(1.2, 3.2, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x3b0764, roughness: 0.5 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.6;
+            body.castShadow = true;
+            playerGroup.add(body);
+
+            // Head / Hood
+            const headGeo = new THREE.SphereGeometry(0.7, 8, 8);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0xfde047 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 3.2;
+            playerGroup.add(head);
+
+            // Holy Sword
+            const swordGeo = new THREE.BoxGeometry(0.2, 2.2, 0.2);
+            const swordMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, emissive: 0xeab308, emissiveIntensity: 0.4 });
+            const sword = new THREE.Mesh(swordGeo, swordMat);
+            sword.position.set(1.2, 2, 0.5);
+            sword.rotation.x = Math.PI / 4;
+            playerGroup.add(sword);
+
+            playerGroup.position.set(gameState.player.x, 0, gameState.player.z);
+            scene.add(playerGroup);
+            gameState.player.mesh = playerGroup;
+        }
+
+        function createNPCs() {
+            // Father Machete NPC
+            const npcGroup = new THREE.Group();
+            npcGroup.position.set(5, 0, -10);
+
+            const bodyGeo = new THREE.CylinderGeometry(0.8, 1, 3, 8);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x1e1b4b });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            body.position.y = 1.5;
+            npcGroup.add(body);
+
+            // Halo Ring
+            const haloGeo = new THREE.TorusGeometry(0.6, 0.1, 8, 16);
+            const haloMat = new THREE.MeshBasicMaterial({ color: 0xfde047 });
+            const halo = new THREE.Mesh(haloGeo, haloMat);
+            halo.position.y = 3.6;
+            halo.rotation.x = Math.PI / 2;
+            npcGroup.add(halo);
+
+            scene.add(npcGroup);
+            gameState.activeNPC = npcGroup;
+        }
+
+        function spawnInitialEnemies() {
+            // Minions: Cursed Silk Gowns
+            for (let i = 0; i < 6; i++) {
+                spawnMinion((Math.random() - 0.5) * 60, (Math.random() - 0.5) * 40 - 10);
+            }
+        }
+
+        function spawnMinion(x, z) {
+            const enemyGroup = new THREE.Group();
+            enemyGroup.position.set(x, 0, z);
+
+            // Floating Gown Mesh
+            const gownGeo = new THREE.ConeGeometry(1.4, 3, 6);
+            const gownMat = new THREE.MeshStandardMaterial({ color: 0x7e22ce, emissive: 0x581c87, emissiveIntensity: 0.3, wireframe: true });
+            const gown = new THREE.Mesh(gownGeo, gownMat);
+            gown.position.y = 1.8;
+            gown.castShadow = true;
+            enemyGroup.add(gown);
+
+            const enemyObj = {
+                mesh: enemyGroup,
+                type: 'Gown Minion',
+                hp: 40,
+                maxHp: 40,
+                atk: 8,
+                x: x,
+                z: z,
+                speed: 0.05,
+                alive: true
+            };
+
+            scene.add(enemyGroup);
+            gameState.enemies.push(enemyObj);
+        }
+
+        function spawnBossChesar() {
+            if (gameState.boss) return;
+
+            const bossGroup = new THREE.Group();
+            bossGroup.position.set(0, 0, -45);
+
+            // Large Enchanted Gown Boss
+            const dressGeo = new THREE.ConeGeometry(3.5, 7, 8);
+            const dressMat = new THREE.MeshStandardMaterial({ color: 0xd97706, emissive: 0xb45309, emissiveIntensity: 0.5 });
+            const dress = new THREE.Mesh(dressGeo, dressMat);
+            dress.position.y = 4;
+            dress.castShadow = true;
+            bossGroup.add(dress);
+
+            // Dark Aura Wings
+            const wingGeo = new THREE.BoxGeometry(6, 3, 0.2);
+            const wingMat = new THREE.MeshStandardMaterial({ color: 0x451a03, wireframe: true });
+            const wing = new THREE.Mesh(wingGeo, wingMat);
+            wing.position.set(0, 5, -0.5);
+            bossGroup.add(wing);
+
+            const bossObj = {
+                mesh: bossGroup,
+                type: 'Chesar - The Cursed Madress',
+                hp: 350,
+                maxHp: 350,
+                atk: 22,
+                x: 0,
+                z: -45,
+                speed: 0.04,
+                alive: true
+            };
+
+            scene.add(bossGroup);
+            gameState.boss = bossObj;
+            
+            // Show Boss Target Bar
+            document.getElementById('target-hud').classList.remove('hidden');
+        }
+
+        function setupInputListeners() {
+            window.addEventListener('keydown', (e) => {
+                keys[e.key.toLowerCase()] = true;
+                if (e.key === '1') triggerSkill(1);
+                if (e.key === '2') triggerSkill(2);
+                if (e.key === '3') triggerSkill(3);
+                if (e.key === '4') usePotion();
+                if (e.key.toLowerCase() === 'e') interactNearest();
+            });
+
+            window.addEventListener('keyup', (e) => {
+                keys[e.key.toLowerCase()] = false;
+            });
+
+            window.addEventListener('mousedown', (e) => {
+                if (e.target.tagName === 'CANVAS') {
+                    isMouseDown = true;
+                    mouseX = e.clientX;
+                    mouseY = e.clientY;
+                }
+            });
+
+            window.addEventListener('mouseup', () => isMouseDown = false);
+
+            window.addEventListener('mousemove', (e) => {
+                if (isMouseDown) {
+                    const deltaX = e.clientX - mouseX;
+                    gameState.player.rotY -= deltaX * 0.008;
+                    mouseX = e.clientX;
+                    mouseY = e.clientY;
+                }
+            });
+
+            window.addEventListener('click', (e) => {
+                if (e.target.tagName === 'CANVAS' && !isMouseDown) {
+                    performBasicAttack();
+                }
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            updatePlayerMovement();
+            updateCooldowns();
+            updateEnemiesAndCombat();
+            updateCameraPosition();
+            renderMinimap();
+
+            renderer.render(scene, camera);
+        }
+
+        function updatePlayerMovement() {
+            const p = gameState.player;
+            if (!p.mesh) return;
+
+            let moveSpeed = 0.22;
+            let dx = 0, dz = 0;
+
+            if (keys['w'] || keys['arrowup']) dz -= 1;
+            if (keys['s'] || keys['arrowdown']) dz += 1;
+            if (keys['a'] || keys['arrowleft']) dx -= 1;
+            if (keys['d'] || keys['arrowright']) dx += 1;
+
+            if (dx !== 0 || dz !== 0) {
+                const moveVec = new THREE.Vector3(dx, 0, dz).normalize();
+                moveVec.applyAxisAngle(new THREE.Vector3(0, 1, 0), p.rotY);
+
+                p.x += moveVec.x * moveSpeed;
+                p.z += moveVec.z * moveSpeed;
+
+                p.mesh.position.set(p.x, 0, p.z);
+                p.mesh.rotation.y = p.rotY;
+            }
+        }
+
+        function updateCameraPosition() {
+            const p = gameState.player;
+            if (!p.mesh) return;
+
+            const camDistance = 14;
+            const camHeight = 9;
+
+            camera.position.x = p.x + Math.sin(p.rotY) * camDistance;
+            camera.position.z = p.z + Math.cos(p.rotY) * camDistance;
+            camera.position.y = camHeight;
+
+            camera.lookAt(p.x, 2, p.z);
+        }
+
+        function updateCooldowns() {
+            for (let i = 1; i <= 3; i++) {
+                if (gameState.cooldowns[i] > 0) {
+                    gameState.cooldowns[i] -= 0.016;
+                    const cdEl = document.getElementById(`cd-${i}`);
+                    if (cdEl) {
+                        cdEl.classList.remove('hidden');
+                        cdEl.innerText = `${Math.ceil(gameState.cooldowns[i])}s`;
+                    }
+                } else {
+                    const cdEl = document.getElementById(`cd-${i}`);
+                    if (cdEl) cdEl.classList.add('hidden');
+                }
+            }
+        }
+
+        function updateEnemiesAndCombat() {
+            const p = gameState.player;
+
+            // Update Normal Minions
+            gameState.enemies.forEach(enemy => {
+                if (!enemy.alive) return;
+
+                // Floating bob animation
+                enemy.mesh.position.y = 0.5 + Math.sin(Date.now() * 0.004) * 0.3;
+
+                // Move towards player if within range
+                const dist = Math.hypot(enemy.mesh.position.x - p.x, enemy.mesh.position.z - p.z);
+                if (dist < 18 && dist > 2) {
+                    const angle = Math.atan2(p.z - enemy.mesh.position.z, p.x - enemy.mesh.position.x);
+                    enemy.mesh.position.x += Math.cos(angle) * enemy.speed;
+                    enemy.mesh.position.z += Math.sin(angle) * enemy.speed;
+                }
+
+                // Attack Player
+                if (dist <= 2.2) {
+                    damagePlayer(enemy.atk * 0.03);
+                }
+            });
+
+            // Update Boss Chesar
+            if (gameState.boss && gameState.boss.alive) {
+                const b = gameState.boss;
+                b.mesh.position.y = 1 + Math.sin(Date.now() * 0.003) * 0.5;
+
+                const dist = Math.hypot(b.mesh.position.x - p.x, b.mesh.position.z - p.z);
+                if (dist < 25 && dist > 3.5) {
+                    const angle = Math.atan2(p.z - b.mesh.position.z, p.x - b.mesh.position.x);
+                    b.mesh.position.x += Math.cos(angle) * b.speed;
+                    b.mesh.position.z += Math.sin(angle) * b.speed;
+                }
+
+                if (dist <= 4) {
+                    damagePlayer(b.atk * 0.04);
+                }
+
+                // Update Boss UI HP
+                const hpPct = Math.max(0, (b.hp / b.maxHp) * 100);
+                document.getElementById('target-hp-fill').style.width = `${hpPct}%`;
+            }
+        }
+
+        /* COMBAT & SKILL ACTIONS */
+        function performBasicAttack() {
+            const p = gameState.player;
+            playSound('slash');
+
+            // Visual slash animation
+            spawnFloatingText('SLASH!', p.x, p.z, '#fde047');
+
+            // Hit minion in range
+            gameState.enemies.forEach(enemy => {
+                if (!enemy.alive) return;
+                const dist = Math.hypot(enemy.mesh.position.x - p.x, enemy.mesh.position.z - p.z);
+                if (dist <= 4.5) {
+                    damageEnemy(enemy, p.atk);
+                }
+            });
+
+            // Hit boss in range
+            if (gameState.boss && gameState.boss.alive) {
+                const dist = Math.hypot(gameState.boss.mesh.position.x - p.x, gameState.boss.mesh.position.z - p.z);
+                if (dist <= 5.5) {
+                    damageEnemy(gameState.boss, p.atk);
+                }
+            }
+        }
+
+        function triggerSkill(slot) {
+            const p = gameState.player;
+            if (gameState.cooldowns[slot] > 0) return;
+
+            if (slot === 1) { // Holy Slash
+                if (p.mp < 15) return;
+                p.mp -= 15;
+                gameState.cooldowns[1] = 3;
+                playSound('magic');
+                spawnFloatingText('HOLY SLASH!!', p.x, p.z, '#38bdf8');
+
+                gameState.enemies.forEach(enemy => {
+                    if (enemy.alive && Math.hypot(enemy.mesh.position.x - p.x, enemy.mesh.position.z - p.z) <= 6) {
+                        damageEnemy(enemy, p.atk * 2.2);
+                    }
+                });
+                if (gameState.boss && gameState.boss.alive && Math.hypot(gameState.boss.mesh.position.x - p.x, gameState.boss.mesh.position.z - p.z) <= 7) {
+                    damageEnemy(gameState.boss, p.atk * 2.2);
+                }
+            } else if (slot === 2) { // Purify AOE
+                if (p.mp < 25) return;
+                p.mp -= 25;
+                gameState.cooldowns[2] = 6;
+                playSound('magic');
+                spawnFloatingText('PURIFYING LIGHT!', p.x, p.z, '#c084fc');
+
+                gameState.enemies.forEach(enemy => {
+                    if (enemy.alive && Math.hypot(enemy.mesh.position.x - p.x, enemy.mesh.position.z - p.z) <= 10) {
+                        damageEnemy(enemy, p.atk * 3);
+                    }
+                });
+                if (gameState.boss && gameState.boss.alive && Math.hypot(gameState.boss.mesh.position.x - p.x, gameState.boss.mesh.position.z - p.z) <= 10) {
+                    damageEnemy(gameState.boss, p.atk * 3);
+                }
+            } else if (slot === 3) { // Holy Shield
+                if (p.mp < 20) return;
+                p.mp -= 20;
+                gameState.cooldowns[3] = 10;
+                playSound('magic');
+                p.shieldActive = true;
+                spawnFloatingText('SHIELD ACTIVATED', p.x, p.z, '#22d3ee');
+                setTimeout(() => p.shieldActive = false, 5000);
+            }
+
+            updateHUD();
+        }
+
+        function damageEnemy(enemy, rawDmg) {
+            const actualDmg = Math.round(rawDmg * (1 + Math.random() * 0.2));
+            enemy.hp -= actualDmg;
+            playSound('hit');
+
+            spawnFloatingText(`-${actualDmg}`, enemy.mesh.position.x, enemy.mesh.position.z, '#ef4444');
+
+            if (enemy.hp <= 0) {
+                enemy.alive = false;
+                scene.remove(enemy.mesh);
+
+                // Quest 2 Progress (Cursed Fabric)
+                if (enemy.type === 'Gown Minion') {
+                    addQuestProgress('q2', 1);
+                    addInventoryItem('fabric', 'Cursed Fabric', 1);
+                }
+
+                // Quest 4 Progress (Boss Defeat)
+                if (enemy.type.includes('Chesar')) {
+                    addQuestProgress('q4', 1);
+                    showEndgame(true);
+                }
+
+                gainEXP(35);
+            }
+        }
+
+        function damagePlayer(amount) {
+            const p = gameState.player;
+            if (p.shieldActive) amount *= 0.3; // 70% reduction
+
+            const netDmg = Math.max(1, Math.round(amount - p.def * 0.2));
+            p.hp -= netDmg;
+            updateHUD();
+
+            if (p.hp <= 0) {
+                p.hp = 0;
+                showEndgame(false);
+            }
+        }
+
+        function usePotion() {
+            const p = gameState.player;
+            if (p.potions > 0 && p.hp < p.maxHp) {
+                p.potions--;
+                p.hp = Math.min(p.maxHp, p.hp + 50);
+                playSound('levelup');
+                spawnFloatingText('+50 HP', p.x, p.z, '#4ade80');
+                updateHUD();
+            }
+        }
+
+        function gainEXP(amount) {
+            const p = gameState.player;
+            p.exp += amount;
+            if (p.exp >= p.nextExp) {
+                p.level++;
+                p.exp -= p.nextExp;
+                p.nextExp = Math.round(p.nextExp * 1.5);
+                p.maxHp += 20;
+                p.hp = p.maxHp;
+                p.maxMp += 10;
+                p.mp = p.maxMp;
+                p.atk += 4;
+                p.skillPoints++;
+
+                playSound('levelup');
+                spawnFloatingText('LEVEL UP!', p.x, p.z, '#facc15');
+            }
+            updateHUD();
+        }
+
+        function interactNearest() {
+            const p = gameState.player;
+
+            // Check NPC Father Machete
+            if (gameState.activeNPC) {
+                const dist = Math.hypot(gameState.activeNPC.position.x - p.x, gameState.activeNPC.position.z - p.z);
+                if (dist <= 4) {
+                    openNPCDialog();
+                    return;
+                }
+            }
+
+            // Check Fountains for Quest 3
+            gameState.fountains.forEach(f => {
+                if (!f.userData.purified) {
+                    const dist = Math.hypot(f.position.x - p.x, f.position.z - p.z);
+                    if (dist <= 4) {
+                        f.userData.purified = true;
+                        f.children[1].material.color.setHex(0xa855f7); // Purified purple light
+                        playSound('magic');
+                        spawnFloatingText('FOUNTAIN PURIFIED!', p.x, p.z, '#a855f7');
+                        addQuestProgress('q3', 1);
+                    }
+                }
+            });
+        }
+
+        function openNPCDialog() {
+            const dlg = document.getElementById('dialog-modal');
+            dlg.classList.remove('hidden');
+
+            const currentQ = gameState.quests[gameState.currentQuestIndex];
+            const speakerEl = document.getElementById('dialog-speaker');
+            const textEl = document.getElementById('dialog-text');
+            const btnEl = document.getElementById('dialog-btn-primary');
+
+            speakerEl.innerText = "Father Machete (Village Priest)";
+
+            if (currentQ.id === 'q1') {
+                textEl.innerText = "Greetings Exorcist! Madre Chesar was obsessed with gowns and got cursed into a cloth monster. Help us defeat the dress specters!";
+                btnEl.innerText = "Accept Quest (Collect Fabrics)";
+            } else if (currentQ.id === 'q2') {
+                textEl.innerText = "Defeat the Cursed Silk Gowns to collect 5 Cursed Fabrics so we can craft holy seals!";
+                btnEl.innerText = "Understood";
+            } else if (currentQ.id === 'q3') {
+                textEl.innerText = "Now cleanse the 3 Holy Water Fountains around the Church altar to weaken Chesar's power!";
+                btnEl.innerText = "I will purify them";
+            } else {
+                textEl.innerText = "Chesar has summoned her final Form at the Altar! Break the Curse of Madress!";
+                btnEl.innerText = "To Battle!";
+            }
+        }
+
+        function handleDialogAction() {
+            const currentQ = gameState.quests[gameState.currentQuestIndex];
+            if (currentQ.id === 'q1') {
+                addQuestProgress('q1', 1);
+                unlockQuest('q2');
+            }
+            closeDialog();
+        }
+
+        function closeDialog() {
+            document.getElementById('dialog-modal').classList.add('hidden');
+        }
+
+        function addQuestProgress(qId, amt) {
+            const q = gameState.quests.find(x => x.id === qId);
+            if (q && q.status === 'active') {
+                q.current = Math.min(q.goal, q.current + amt);
+                if (q.current >= q.goal) {
+                    q.status = 'completed';
+                    playSound('levelup');
+                    
+                    // Auto unlock next quest
+                    if (qId === 'q2') {
+                        unlockQuest('q3');
+                    } else if (qId === 'q3') {
+                        unlockQuest('q4');
+                        spawnBossChesar();
+                    }
+                }
+                renderQuests();
+                updateHUD();
+            }
+        }
+
+        function unlockQuest(qId) {
+            const q = gameState.quests.find(x => x.id === qId);
+            if (q) {
+                q.status = 'active';
+                gameState.currentQuestIndex = gameState.quests.indexOf(q);
+                document.getElementById('quest-indicator').classList.remove('hidden');
+                renderQuests();
+                updateHUD();
+            }
+        }
+
+        function renderQuests() {
+            const container = document.getElementById('quest-list-container');
+            container.innerHTML = '';
+
+            gameState.quests.forEach(q => {
+                const item = document.createElement('div');
+                item.className = `p-3 rounded-xl border ${q.status === 'completed' ? 'bg-emerald-950/40 border-emerald-500/50' : q.status === 'active' ? 'bg-purple-950/50 border-amber-400/50' : 'bg-gray-900/40 border-gray-800'}`;
+                
+                item.innerHTML = `
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="font-cinzel font-bold text-xs ${q.status === 'completed' ? 'text-emerald-400' : 'text-amber-300'}">${q.title}</span>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded ${q.status === 'completed' ? 'bg-emerald-900 text-emerald-200' : q.status === 'active' ? 'bg-amber-500 text-black' : 'bg-gray-800 text-gray-500'}">${q.status.toUpperCase()}</span>
+                    </div>
+                    <p class="text-xs text-gray-300 mb-2">${q.desc}</p>
+                    <div class="w-full h-1.5 bg-gray-950 rounded-full overflow-hidden">
+                        <div class="bg-amber-400 h-full" style="width: ${(q.current / q.goal) * 100}%"></div>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        function addInventoryItem(id, name, count) {
+            const existing = gameState.inventory.find(i => i.id === id);
+            if (existing) {
+                existing.count += count;
+            } else {
+                gameState.inventory.push({ id, name, count, icon: 'fa-box', type: 'material', desc: 'Item collected' });
+            }
+            renderInventory();
+        }
+
+        function renderInventory() {
+            const grid = document.getElementById('inventory-grid');
+            grid.innerHTML = '';
+
+            gameState.inventory.forEach(item => {
+                const el = document.createElement('div');
+                el.className = 'p-2 bg-purple-950/60 border border-purple-700/40 rounded-xl flex flex-col items-center justify-center text-center hover:border-amber-400 relative';
+                el.innerHTML = `
+                    <i class="fa-solid ${item.icon} text-amber-300 text-xl mb-1"></i>
+                    <span class="text-[10px] font-bold text-gray-200 truncate w-full">${item.name}</span>
+                    <span class="absolute top-1 right-1 text-[9px] bg-black/80 px-1 rounded text-amber-400 font-bold">x${item.count}</span>
+                `;
+                grid.appendChild(el);
+            });
+        }
+
+        function selectClass(className) {
+            gameState.player.class = className;
+            document.getElementById('player-class-badge').innerText = className;
+            if (className === 'Holy Knight') {
+                gameState.player.atk += 5;
+                gameState.player.def += 8;
+            } else if (className === 'Arcane Dressmaker') {
+                gameState.player.dressResist += 15;
+                gameState.player.maxMp += 30;
+            }
+            updateHUD();
+        }
+
+        function updateHUD() {
+            const p = gameState.player;
+            document.getElementById('player-level').innerText = `Lv.${p.level}`;
+            document.getElementById('hp-bar-fill').style.width = `${Math.max(0, (p.hp / p.maxHp) * 100)}%`;
+            document.getElementById('hp-text').innerText = `${Math.round(p.hp)} / ${p.maxHp}`;
+
+            document.getElementById('mp-bar-fill').style.width = `${Math.max(0, (p.mp / p.maxMp) * 100)}%`;
+            document.getElementById('mp-text').innerText = `${Math.round(p.mp)} / ${p.maxMp}`;
+
+            document.getElementById('exp-bar-fill').style.width = `${(p.exp / p.nextExp) * 100}%`;
+            document.getElementById('potion-count').innerText = p.potions;
+
+            // Active Quest Tracker
+            const activeQ = gameState.quests[gameState.currentQuestIndex];
+            if (activeQ) {
+                document.getElementById('quest-tracker-title').innerText = activeQ.title;
+                document.getElementById('quest-tracker-desc').innerText = `${activeQ.desc} (${activeQ.current}/${activeQ.goal})`;
+            }
+
+            // Stats modal sync
+            document.getElementById('stat-atk').innerText = p.atk;
+            document.getElementById('stat-def').innerText = p.def;
+            document.getElementById('stat-res').innerText = `${p.dressResist}%`;
+        }
+
+        function renderMinimap() {
+            const canvas = document.getElementById('minimap-canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            const scale = 1.2;
+
+            // Player Marker
+            ctx.fillStyle = '#facc15';
+            ctx.beginPath();
+            ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Enemies
+            ctx.fillStyle = '#ef4444';
+            gameState.enemies.forEach(e => {
+                if (e.alive) {
+                    const ex = cx + (e.mesh.position.x - gameState.player.x) * scale;
+                    const ez = cy + (e.mesh.position.z - gameState.player.z) * scale;
+                    ctx.beginPath();
+                    ctx.arc(ex, ez, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // Boss
+            if (gameState.boss && gameState.boss.alive) {
+                ctx.fillStyle = '#a855f7';
+                const bx = cx + (gameState.boss.mesh.position.x - gameState.player.x) * scale;
+                const bz = cy + (gameState.boss.mesh.position.z - gameState.player.z) * scale;
+                ctx.beginPath();
+                ctx.arc(bx, bz, 6, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function spawnFloatingText(text, x, z, color) {
+            const container = document.getElementById('ui-world-layer');
+            const el = document.createElement('div');
+            el.className = 'dmg-text text-sm sm:text-base';
+            el.style.color = color;
+            el.innerText = text;
+
+            // Convert 3D world pos to 2D screen pos
+            const vector = new THREE.Vector3(x, 2.5, z);
+            vector.project(camera);
+
+            const sx = (vector.x * .5 + .5) * window.innerWidth;
+            const sy = (-(vector.y * .5) + .5) * window.innerHeight;
+
+            el.style.left = `${sx}px`;
+            el.style.top = `${sy}px`;
+
+            container.appendChild(el);
+            setTimeout(() => el.remove(), 1200);
+        }
+
+        function toggleWindow(id) {
+            const windowEl = document.getElementById(id);
+            if (windowEl.classList.contains('hidden')) {
+                windowEl.classList.remove('hidden');
+            } else {
+                windowEl.classList.add('hidden');
+            }
+        }
+
+        function showEndgame(victory) {
+            const modal = document.getElementById('endgame-modal');
+            const title = document.getElementById('endgame-title');
+            const sub = document.getElementById('endgame-sub');
+
+            modal.classList.remove('hidden');
+            if (victory) {
+                title.innerText = "CURSE BROKEN!";
+                title.className = "font-cinzel text-3xl font-extrabold text-amber-400 mb-2";
+                sub.innerText = "You defeated Chesar and liberated Madress from the Dress Curse! Moral: Don't wear dresses without limit!";
+            } else {
+                title.innerText = "YOU WERE TURNED INTO A DRESS!";
+                title.className = "font-cinzel text-3xl font-extrabold text-red-500 mb-2";
+                sub.innerText = "Madre Chesar's spell claimed another victim!";
+            }
+        }
+
+        function resetGame() {
+            location.reload();
+        }
+
+        function initGameDataUI() {
+            renderQuests();
+            renderInventory();
+            updateHUD();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+    </script>
+</body>
+</html>
